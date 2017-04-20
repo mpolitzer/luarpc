@@ -129,7 +129,6 @@ function M.createProxy(ip, port, iface)
 				assert(type(params[pk]) == M.idltype2lua[idltype])
 			end
 			--marshall
-			local msg = "return{"..k..'='..M.marshall_table(params)..'}\n'
 			local msg = M.marshall_call(k, params)..'\n'
 
 			-- send
