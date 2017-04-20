@@ -1,0 +1,4 @@
+code:
+  ☐ - fix createProxy to conform with original IDL (dofile does not work with the original)
+doc:
+  ☐ - report with tests (http://www.inf.puc-rio.br/~noemi/sd-17/trab2.html)
