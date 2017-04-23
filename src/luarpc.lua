@@ -21,14 +21,38 @@ M.get_next_port = (function(first)
 	end
 end)()
 
-function M.createServant(impl, iface, port)
-	port = port or M.get_next_port()
-	sock, err = socket.bind("*", port)
-	print("serving on: "..port)
+function M.check_iface_args(impl, iface)
+  for name,func in pairs(impl) do
+    iface_method = iface['methods'][name]
+    if iface_method then
+      iface_arg_size = #iface_method['args']
+      impl_arg_size = 0
+      while debug.getlocal(func, impl_arg_size + 1) do
+        impl_arg_size = impl_arg_size + 1
+      end
+      if iface_arg_size ~= impl_arg_size then
+        return false
+      end
+    else
+      return false
+    end
+  end
 
-	-- TODO: check if impl and iface match
-	table.insert(M.sockets, sock)
-	M.servers[sock] = impl
+  return true
+end
+
+
+function M.createServant(impl, iface, port)
+  if M.check_iface_args(impl, iface) then
+    port = port or M.get_next_port()
+    sock, err = socket.bind("*", port)
+    print("serving on: "..port)
+
+    table.insert(M.sockets, sock)
+    M.servers[sock] = impl
+  else
+    print("implementation doesn't match interface")
+  end
 end
 
 function list(t)
@@ -81,7 +105,7 @@ function M.unmarshall_ret(t)
 end
 
 function M.waitIncoming()
-	while true do
+	while next(M.sockets) ~= nil do
 		local rxs, txs, ers = socket.select(M.sockets)
 		for _,conn in ipairs(rxs) do
 			local client = conn
@@ -122,7 +146,7 @@ function M.createProxy(ip, port, iface)
 			local params = {...}
 
 			--print(#params, #iface.methods[k].args)
-			-- check
+			-- TODO: check
 			assert(#params == #iface.methods[k].args)
 			for pk,pv in ipairs(params) do
 				local idltype = iface.methods[k].args[pk].type
