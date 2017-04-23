@@ -5,12 +5,7 @@ M.servers   = {}
 M.sockets   = {}
 M.conns     = {}
 M.rpcmap    = {}
-
-M.idltype2lua = {
-	["string"] = "string",
-	["double"] = "number",
-	["void"  ] = nil,      -- Looks fishy...
-}
+M.ifaces    = {}
 
 -- open ports in the LAB: [5500 - 5509]
 M.get_next_port = (function(first)
@@ -21,7 +16,7 @@ M.get_next_port = (function(first)
 	end
 end)()
 
-function M.check_iface_args(impl, iface)
+function M.check_iface(impl, iface)
   for name,func in pairs(impl) do
     iface_method = iface['methods'][name]
     if iface_method then
@@ -43,13 +38,15 @@ end
 
 
 function M.createServant(impl, iface, port)
-  if M.check_iface_args(impl, iface) then
+  -- check if impl and iface match
+  if M.check_iface(impl, iface) then
     port = port or M.get_next_port()
     sock, err = socket.bind("*", port)
     print("serving on: "..port)
 
     table.insert(M.sockets, sock)
     M.servers[sock] = impl
+    M.ifaces[sock] = iface
   else
     print("implementation doesn't match interface")
   end
@@ -101,7 +98,21 @@ function M.marshall_ret(t)
 end
 
 function M.unmarshall_ret(t)
+  local _, func = M.unmarshall(t)
 	return M.unmarshall(t)()
+end
+
+function M.parse_call(call, args, iface)
+  iface_args = iface["methods"][call]["args"]
+  for i,arg in pairs(iface_args) do
+    if arg["direction"] == "in" or arg["direction"] == "inout" then
+      if arg["type"] == "double" then
+        args[i] = tonumber(args[i]) or 0
+      elseif arg["type"] == "string" then
+        args[i] = tostring(args[i]) or ''
+      end
+    end
+  end
 end
 
 function M.waitIncoming()
@@ -113,6 +124,7 @@ function M.waitIncoming()
 				client = assert(conn:accept())
 				client:settimeout(0.01) -- no timeout
 				M.servers[client] = M.servers[conn]
+				M.ifaces[client] = M.ifaces[conn]
 			end
 
 			repeat
@@ -121,9 +133,8 @@ function M.waitIncoming()
 
 				if M.servers[client] and m then
 					local call, args = M.unmarshall_call(m)
-					-- TODO: validate that args conform with the IDL
-					local ret = {M.servers[client][call](unpack(args))}
-					client:send(M.marshall_ret(ret)..'\n')
+					local status, ret = pcall(M.servers[client][call], unpack(args))
+          client:send(M.marshall_ret({ret})..'\n')
 				else client:send("__ERRORPC\n")
 				end
 			until e
@@ -147,10 +158,10 @@ function M.createProxy(ip, port, iface)
 
 			--print(#params, #iface.methods[k].args)
 			-- TODO: check
-			assert(#params == #iface.methods[k].args)
+			-- assert(#params == #iface.methods[k].args)
 			for pk,pv in ipairs(params) do
 				local idltype = iface.methods[k].args[pk].type
-				assert(type(params[pk]) == M.idltype2lua[idltype])
+        -- assert(type(params[pk]) == M.idltype2lua[idltype])
 			end
 			--marshall
 			local msg = M.marshall_call(k, params)..'\n'
