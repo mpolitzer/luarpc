@@ -63,7 +63,7 @@ end
 function M.marshall_table(t)
 	local s = '{'
 	for i,v in ipairs(t) do
-		if     (type(v) == "string") then s = s.."'"..v.."'"
+    if     (type(v) == "string") then s = s.."[["..v.."]]"
 		elseif (type(v) == "number") then s = s..v
 		end
 
@@ -120,18 +120,59 @@ function M.waitIncoming()
 
 				if M.servers[client] and m then
 					local call, args = M.unmarshall_call(m)
-					local status, ret = pcall(M.servers[client][call], unpack(args))
-          client:send(M.marshall_ret({ret})..'\n')
-				else client:send("__ERRORPC\n")
+					local ret = {pcall(M.servers[client][call], unpack(args))}
+          table.remove(ret, 1) -- undesired pcall status
+          client:send(M.marshall_ret(ret)..'\n')
+				else client:send(M.marshall_ret({'__ERRORPC'})..'\n')
 				end
 			until e
 
 			if m == "closed" then
 				table.remove(M.sockets, k)
 				M.servers[client] = nil
+				M.ifaces[client] = nil
 			end
 		end
 	end
+end
+
+function M.parse_call(call, args, iface)
+  local status, ret = true, args
+  iface_args = iface["methods"][call]["args"]
+
+  for i,iarg in pairs(iface_args) do
+    if iarg["direction"] == "in" or iarg["direction"] == "inout" then
+      if iarg["type"] == "double" then
+        parsed = tonumber(args[i])
+        if type(parsed) == "number" then
+          args[i] = parsed
+        else
+          status = false
+          ret = "RPC: type mismatch: invalid double - "..call.."("..tostring(args[i])..")"
+        end
+      elseif iarg["type"] == "string" or iarg["type"] == "char" then
+        parsed = tostring(args[i])
+        if type(parsed) == "string" then
+          args[i] = parsed
+        else
+          status = false
+          ret = "RPC: type mismatch: invalid string - "..call
+        end
+      end
+    end
+  end
+
+  return status, ret
+end
+
+function M.parse_result(call, result, iface)
+  local status, ret = true, result
+  expected_type = iface["methods"][call]["resulttype"]
+  if expected_type ~= type(result) then
+    status = false
+    ret = "RPC: return type mismatch: invalid "..expected_type.." - "..call
+  end
+  return status, ret
 end
 
 function M.createProxy(ip, port, iface)
@@ -142,25 +183,27 @@ function M.createProxy(ip, port, iface)
 
 			-- build message and validate parameters
 			local params = {...}
+      local status
+      -- parse params according to IDL
+      status, params = M.parse_call(k, params, iface)
 
-			--print(#params, #iface.methods[k].args)
-			-- TODO: check
-			-- assert(#params == #iface.methods[k].args)
-			for pk,pv in ipairs(params) do
-				local idltype = iface.methods[k].args[pk].type
-        -- assert(type(params[pk]) == M.idltype2lua[idltype])
-			end
-			--marshall
-			local msg = M.marshall_call(k, params)..'\n'
+      if status then
+        --marshall
+        local msg = M.marshall_call(k, params)..'\n'
 
-			-- send
-			self.conn:send(msg)
+        -- send
+        self.conn:send(msg)
 
-			-- receive
-			local s,m = self.conn:receive()
-			local ret = M.unmarshall_ret(s)
-			-- TODO: validate that ret values conform with IDL
-			return unpack(ret)
+        -- receive
+        local s,m = self.conn:receive()
+        local ret = M.unmarshall_ret(s)
+
+        -- validate that ret values conform with IDL
+        -- status, params = M.parse_result(k, ret, iface)
+        -- if status then return unpack(params) end
+        return unpack(ret)
+      end
+      return params -- type mismatch message
 		end
 	end
 
