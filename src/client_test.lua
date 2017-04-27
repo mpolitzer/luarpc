@@ -1,7 +1,7 @@
 local socket = require "socket"
 local rpc = require "luarpc"
 
-local obj1 = rpc.createProxy("*", 5500, dofile("idl_test.lua"))
+local obj1 = rpc.createProxy("*", 5500, "idl_test.lua")
 
 print("Execução de foo 10000x")
 local a, b

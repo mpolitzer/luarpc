@@ -6,6 +6,6 @@ local obj1 = {
 	boo = function (n)       return 2              end,
 }
 
-rpc.createServant(obj1, dofile("idl_test.lua"))
+rpc.createServant(obj1, "idl_test.lua")
 
 rpc.waitIncoming()
