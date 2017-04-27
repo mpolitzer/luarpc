@@ -108,6 +108,19 @@ function M.unmarshall_ret(t)
 	return M.unmarshall(t)()
 end
 
+function M.parse_call(call, args, iface)
+  iface_args = iface["methods"][call]["args"]
+  for i,arg in pairs(iface_args) do
+    if arg["direction"] == "in" or arg["direction"] == "inout" then
+      if arg["type"] == "double" then
+        args[i] = tonumber(args[i]) or 0
+      elseif arg["type"] == "string" then
+        args[i] = tostring(args[i]) or ''
+      end
+    end
+  end
+end
+
 function M.waitIncoming()
 	while next(M.sockets) ~= nil do
 		local rxs, txs, ers = socket.select(M.sockets)
