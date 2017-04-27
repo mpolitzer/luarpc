@@ -9,7 +9,7 @@ local obj2 = {
 	boo = function (n)       return 1            end
 }
 
-rpc.createServant(obj1, dofile("idl_example.lua"))
-rpc.createServant(obj2, dofile("idl_example.lua"))
+rpc.createServant(obj1, "idl_example.lua")
+rpc.createServant(obj2, "idl_example.lua")
 
 rpc.waitIncoming()

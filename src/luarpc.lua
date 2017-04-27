@@ -37,19 +37,25 @@ function M.check_iface(impl, iface)
 end
 
 
-function M.createServant(impl, iface, port)
-  -- check if impl and iface match
-  if M.check_iface(impl, iface) then
-    port = port or M.get_next_port()
-    sock, err = socket.bind("*", port)
-    print("serving on: "..port)
+function M.createServant(impl, iface_file, port)
+	local iface = {}
+	interface = function(hack_iface)
+		iface = hack_iface
+	end
+	dofile(iface_file)
 
-    table.insert(M.sockets, sock)
-    M.servers[sock] = impl
-    M.ifaces[sock] = iface
-  else
-    print("implementation doesn't match interface")
-  end
+	-- check if impl and iface match
+	if M.check_iface(impl, iface) then
+		port = port or M.get_next_port()
+		sock, err = socket.bind("*", port)
+		print("serving on: "..port)
+
+		table.insert(M.sockets, sock)
+		M.servers[sock] = impl
+		M.ifaces[sock] = iface
+	else
+		print("implementation doesn't match interface")
+	end
 end
 
 function list(t)
@@ -63,7 +69,7 @@ end
 function M.marshall_table(t)
 	local s = '{'
 	for i,v in ipairs(t) do
-    if     (type(v) == "string") then s = s.."[["..v.."]]"
+		if     (type(v) == "string") then s = s.."[["..v.."]]"
 		elseif (type(v) == "number") then s = s..v
 		end
 
@@ -175,35 +181,41 @@ function M.parse_result(call, result, iface)
   return status, ret
 end
 
-function M.createProxy(ip, port, iface)
+function M.createProxy(ip, port, iface_file)
 	local proxy = {}
+
+	interface = function(hack_iface)
+		iface = hack_iface
+	end
+
+	dofile(iface_file)
 
 	for k,v in pairs(iface.methods) do
 		proxy[k] = function(self, ...)
 
 			-- build message and validate parameters
 			local params = {...}
-      local status
-      -- parse params according to IDL
-      status, params = M.parse_call(k, params, iface)
+			local status
+			-- parse params according to IDL
+			status, params = M.parse_call(k, params, iface)
 
-      if status then
-        --marshall
-        local msg = M.marshall_call(k, params)..'\n'
+			if status then
+				--marshall
+				local msg = M.marshall_call(k, params)..'\n'
 
-        -- send
-        self.conn:send(msg)
+				-- send
+				self.conn:send(msg)
 
-        -- receive
-        local s,m = self.conn:receive()
-        local ret = M.unmarshall_ret(s)
+				-- receive
+				local s,m = self.conn:receive()
+				local ret = M.unmarshall_ret(s)
 
-        -- validate that ret values conform with IDL
-        -- status, params = M.parse_result(k, ret, iface)
-        -- if status then return unpack(params) end
-        return unpack(ret)
-      end
-      return params -- type mismatch message
+				-- validate that ret values conform with IDL
+				-- status, params = M.parse_result(k, ret, iface)
+				-- if status then return unpack(params) end
+				return unpack(ret)
+			end
+			return params -- type mismatch message
 		end
 	end
 

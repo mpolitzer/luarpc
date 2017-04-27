@@ -1,4 +1,4 @@
-return {
+interface {
 	name = "fooboo",
 	methods = {
 		foo = {
